@@ -1,0 +1,192 @@
+.dashboard { max-width: 1100px; }
+
+/* Hero */
+.hero-card {
+  background: linear-gradient(135deg, rgba(232,75,106,0.12), rgba(123,94,167,0.12));
+  border: 1px solid rgba(232,75,106,0.25);
+  border-radius: var(--radius);
+  padding: 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-card::before {
+  content: '';
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 200px; height: 200px;
+  background: radial-gradient(circle, rgba(232,75,106,0.15), transparent 70%);
+  pointer-events: none;
+}
+
+.hero-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.hero-content h2 {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+  max-width: 420px;
+}
+
+.hero-content p {
+  color: var(--muted);
+  font-size: 0.875rem;
+  max-width: 380px;
+  margin-bottom: 24px;
+  line-height: 1.7;
+}
+
+.hero-btn {
+  background: var(--accent);
+  color: white;
+  padding: 12px 28px;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  letter-spacing: 0.02em;
+}
+
+.hero-btn:hover {
+  background: #ff3366;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(232,75,106,0.4);
+}
+
+.hero-visual {
+  position: relative;
+  width: 160px;
+  height: 100px;
+  flex-shrink: 0;
+}
+
+.heart-glow {
+  font-size: 4rem;
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--accent);
+  filter: drop-shadow(0 0 20px var(--accent));
+  animation: pulse-hero 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-hero {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.9; }
+  50% { transform: translate(-50%, -50%) scale(1.12); opacity: 1; }
+}
+
+.ecg-line {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: ecg-pulse 2s linear infinite;
+}
+
+@keyframes ecg-pulse {
+  0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; }
+}
+
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.stat-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 20px;
+  text-align: center;
+  transition: border-color 0.2s;
+}
+
+.stat-card:hover { border-color: rgba(255,255,255,0.15); }
+
+.stat-icon { font-size: 1.4rem; margin-bottom: 10px; }
+.stat-value { font-family: var(--font-display); font-size: 1.8rem; font-weight: 700; }
+.stat-label { font-size: 0.75rem; color: var(--muted); margin-top: 4px; letter-spacing: 0.05em; }
+
+/* Features */
+.section-title {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.feature-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 20px;
+  transition: all 0.2s;
+}
+
+.feature-card:hover {
+  border-color: rgba(123,94,167,0.4);
+  background: rgba(123,94,167,0.05);
+}
+
+.feature-icon { font-size: 1.5rem; margin-bottom: 12px; }
+.feature-title { font-family: var(--font-display); font-size: 0.95rem; font-weight: 600; margin-bottom: 6px; }
+.feature-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.6; }
+
+/* Architecture */
+.arch-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 28px;
+}
+
+.arch-title {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.arch-flow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.arch-step {
+  background: rgba(123,94,167,0.15);
+  border: 1px solid rgba(123,94,167,0.3);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.arch-arrow { color: var(--muted); font-size: 1rem; }
