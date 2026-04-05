@@ -78,6 +78,30 @@ export default function ResultCard({ result, onReset }) {
             <span className="detail-key">Patient ID</span>
             <span className="detail-val mono">{result.user_id?.slice(0, 8)}…</span>
           </div>
+          {result._debug && (
+            <>
+              <div className="detail-row" style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '12px', paddingTop: '12px' }}>
+                <span className="detail-key">Model Status</span>
+                <span className="detail-val" style={{ color: result._debug.model_used ? '#2de89e' : '#f5c842' }}>
+                  {result._debug.model_used ? '✓ AI Model' : '⚠ Mock Data'}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-key">Saved to DB</span>
+                <span className="detail-val" style={{ color: result._debug.saved_to_dynamodb ? '#2de89e' : '#ff4466' }}>
+                  {result._debug.saved_to_dynamodb ? '✓ Yes' : '✗ No'}
+                </span>
+              </div>
+              {result._debug.dynamodb_error && (
+                <div className="detail-row">
+                  <span className="detail-key">DB Error</span>
+                  <span className="detail-val mono" style={{ fontSize: '11px', color: '#ff8899' }}>
+                    {result._debug.dynamodb_error?.substring(0, 40)}...
+                  </span>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
