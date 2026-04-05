@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
+import { ChevronDown, ChevronUp, History as HistoryIcon, LoaderCircle, Search, Filter } from 'lucide-react'
 import { getHistory } from '../utils/api'
 import './History.css'
 
-const RISK_COLORS = { High: '#ff4466', Medium: '#f5c842', Low: '#2de89e' }
+const RISK_COLORS = { High: '#EF4444', Medium: '#F59E0B', Low: '#10B981' }
 
 export default function History() {
   const [history, setHistory] = useState([])
@@ -10,6 +12,9 @@ export default function History() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [debug, setDebug] = useState(null)
+  const [query, setQuery] = useState('')
+  const [riskFilter, setRiskFilter] = useState('All')
+  const [expandedRow, setExpandedRow] = useState(null)
 
   useEffect(() => {
     getHistory()
@@ -28,14 +33,39 @@ export default function History() {
       .finally(() => setLoading(false))
   }, [])
 
+  const filteredHistory = history.filter((item) => {
+    const matchesQuery = !query || [item.prediction_id, item.risk_level, item.timestamp].some((value) => String(value || '').toLowerCase().includes(query.toLowerCase()))
+    const matchesRisk = riskFilter === 'All' || String(item.risk_level || '').toLowerCase() === riskFilter.toLowerCase()
+    return matchesQuery && matchesRisk
+  })
+
   return (
     <div className="history-page">
-      <div className="page-header">
-        <h1>Prediction History</h1>
-        <p>All past cardiac risk assessments stored in DynamoDB</p>
+      <motion.section className="page-header premium-header" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+        <div>
+          <div className="page-kicker">Audit trail</div>
+          <h1>Prediction history</h1>
+          <p>All past cardiac risk assessments stored for review and follow-up.</p>
+        </div>
+      </motion.section>
+
+      <div className="history-toolbar glass-card">
+        <div className="search-box">
+          <Search size={16} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search predictions" />
+        </div>
+        <div className="filter-box">
+          <Filter size={16} />
+          <select value={riskFilter} onChange={(event) => setRiskFilter(event.target.value)}>
+            <option value="All">All risk levels</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+          </select>
+        </div>
       </div>
 
-      {loading && <div className="history-loading"><span className="spinner-lg" /> Loading records…</div>}
+      {loading && <div className="history-loading"><LoaderCircle size={18} className="spin" /> Loading records…</div>}
 
       {error && (
         <div className="history-empty">
@@ -52,7 +82,7 @@ export default function History() {
 
       {!loading && !error && history.length === 0 && (
         <div className="history-empty">
-          <div className="empty-icon">◷</div>
+          <div className="empty-icon"><HistoryIcon size={34} /></div>
           <div className="empty-title">No Records Yet</div>
           <div className="empty-desc">{message || 'Run your first prediction to see history here.'}</div>
           {debug && (
@@ -63,40 +93,45 @@ export default function History() {
         </div>
       )}
 
-      {!loading && history.length > 0 && (
-        <div className="history-table-wrap">
-          <div style={{ padding: '12px', background: 'rgba(45,232,158,0.1)', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', fontFamily: 'monospace' }}>
-            ✓ Loaded <strong>{history.length}</strong> prediction{history.length !== 1 ? 's' : ''} for user <strong>{debug?.user_id?.slice(0, 8)}…</strong>
+      {!loading && filteredHistory.length > 0 && (
+        <motion.div className="history-table-wrap glass-card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="history-meta">
+            Loaded <strong>{filteredHistory.length}</strong> prediction{filteredHistory.length !== 1 ? 's' : ''}
+            {debug?.user_id ? <> for user <strong>{debug.user_id.slice(0, 8)}…</strong></> : null}
           </div>
-          <table className="history-table">
-            <thead>
-              <tr>
-                <th>Prediction ID</th>
-                <th>Risk Level</th>
-                <th>Risk %</th>
-                <th>Model Used</th>
-                <th>Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((item, i) => (
-                <tr key={i}>
-                  <td className="mono">{item.prediction_id?.slice(0, 8) || '—'}…</td>
-                  <td>
-                    <span className="risk-badge" style={{ color: RISK_COLORS[item.risk_level] || 'white' }}>
-                      {item.risk_level || '—'}
-                    </span>
-                  </td>
-                  <td>{item.risk_percentage ? `${parseFloat(item.risk_percentage).toFixed(1)}%` : '—'}</td>
-                  <td style={{ fontSize: '12px', color: item.model_used === 'True' ? '#2de89e' : '#f5c842' }}>
-                    {item.model_used === 'True' ? '✓ AI Model' : '⚠ Mock'}
-                  </td>
-                  <td>{item.timestamp ? new Date(item.timestamp).toLocaleString() : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+
+          <div className="history-cards">
+            {filteredHistory.map((item, index) => (
+              <motion.button
+                key={`${item.prediction_id || index}`}
+                type="button"
+                className="history-row"
+                onClick={() => setExpandedRow(expandedRow === index ? null : index)}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <div className="history-row-main">
+                  <div>
+                    <div className="history-row-title">{item.prediction_id?.slice(0, 10) || 'Prediction'}…</div>
+                    <div className="history-row-sub">{item.timestamp ? new Date(item.timestamp).toLocaleString() : '—'}</div>
+                  </div>
+                  <div className="history-row-stats">
+                    <span className="risk-badge" style={{ color: RISK_COLORS[item.risk_level] || '#2563EB' }}>{item.risk_level || '—'}</span>
+                    <span className="history-pct">{item.risk_percentage ? `${parseFloat(item.risk_percentage).toFixed(1)}%` : '—'}</span>
+                  </div>
+                  {expandedRow === index ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </div>
+
+                {expandedRow === index && (
+                  <div className="history-row-details">
+                    <div>Model: {item.model_used === 'True' ? 'AI model' : 'Mock'}</div>
+                    <div>Prediction ID: {item.prediction_id || '—'}</div>
+                  </div>
+                )}
+              </motion.button>
+            ))}
+          </div>
+        </motion.div>
       )}
     </div>
   )

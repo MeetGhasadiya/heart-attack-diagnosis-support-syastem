@@ -1,69 +1,148 @@
 import React, { useState } from 'react'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import { ActivitySquare, History, LayoutDashboard, LogOut, Menu, PanelLeftClose, ShieldPlus } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import './Layout.css'
 
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: '⬡' },
-  { to: '/predict', label: 'New Analysis', icon: '◈' },
-  { to: '/history', label: 'History', icon: '◷' },
+  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/predict', label: 'Start Prediction', icon: ActivitySquare },
+  { to: '/history', label: 'History', icon: History },
 ]
+
+const pageTitles = {
+  '/': 'Dashboard',
+  '/predict': 'Prediction Workspace',
+  '/history': 'History',
+}
 
 export default function Layout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const pageTitle = pageTitles[location.pathname] || 'Medical AI Workspace'
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    navigate('/login', { replace: true })
+  }
+
+  const handleNavClick = () => {
+    setMobileMenuOpen(false)
   }
 
   return (
-    <div className={`layout ${collapsed ? 'collapsed' : ''}`}>
-      <aside className="sidebar">
-        <div className="sidebar-logo">
-          <span className="logo-icon">♥</span>
-          {!collapsed && <span className="logo-text">CardioAI</span>}
+    <div className={`layout-shell ${collapsed ? 'is-collapsed' : ''} ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+      <motion.aside
+        className="sidebar"
+        initial={{ x: -18, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        <div className="sidebar-brand">
+          <div className="brand-mark">
+            <ShieldPlus size={20} />
+          </div>
+          {!collapsed && (
+            <div>
+              <div className="brand-name">AI Heart Attack</div>
+              <div className="brand-sub">Diagnosis Support</div>
+            </div>
+          )}
         </div>
 
         <nav className="sidebar-nav">
-          {navItems.map(item => (
+          {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/'}
+              end={item.end}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+              onClick={handleNavClick}
             >
-              <span className="nav-icon">{item.icon}</span>
-              {!collapsed && <span className="nav-label">{item.label}</span>}
+              {({ isActive }) => {
+                const Icon = item.icon
+
+                return (
+                  <>
+                    {isActive && <motion.span layoutId="nav-highlight" className="nav-highlight" />}
+                    <Icon size={18} className="nav-icon" />
+                    {!collapsed && <span className="nav-label">{item.label}</span>}
+                  </>
+                )
+              }}
             </NavLink>
           ))}
         </nav>
 
         <div className="sidebar-footer">
           {!collapsed && (
-            <div className="user-info">
-              <div className="user-avatar">{user?.name?.[0]?.toUpperCase()}</div>
-              <div className="user-details">
-                <div className="user-name">{user?.name}</div>
-                <div className="user-email">{user?.email}</div>
+            <div className="sidebar-user">
+              <div className="sidebar-avatar">{user?.name?.[0]?.toUpperCase() || ''}</div>
+              <div className="sidebar-user-copy">
+                <div className="sidebar-user-name">{user?.name || ''}</div>
+                <div className="sidebar-user-email">{user?.email || ''}</div>
               </div>
             </div>
           )}
-          <button className="logout-btn" onClick={handleLogout} title="Logout">
-            ⎋
+
+          <button type="button" className="logout-chip" onClick={handleLogout} title="Logout">
+            <LogOut size={16} />
+            {!collapsed && <span>Logout</span>}
           </button>
         </div>
 
-        <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)}>
-          {collapsed ? '›' : '‹'}
+        <button type="button" className="collapse-btn" onClick={() => setCollapsed((value) => !value)}>
+          <PanelLeftClose size={16} />
         </button>
-      </aside>
+      </motion.aside>
 
-      <main className="main-content">
-        <Outlet />
-      </main>
+      <div className="layout-main">
+        <motion.header
+          className="topbar"
+          initial={{ y: -14, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <button type="button" className="mobile-menu-btn" onClick={() => setMobileMenuOpen((value) => !value)}>
+            <Menu size={18} />
+          </button>
+
+          <div className="topbar-copy">
+            <div className="topbar-kicker">Medical decision support</div>
+            <div className="topbar-title">{pageTitle}</div>
+          </div>
+
+          <div className="topbar-actions">
+            <div className="topbar-user">
+              <div className="topbar-avatar">{user?.name?.[0]?.toUpperCase() || ''}</div>
+              <div>
+                <div className="topbar-user-name">{user?.name || ''}</div>
+                <div className="topbar-user-email">{user?.email || ''}</div>
+              </div>
+            </div>
+
+            <button type="button" className="logout-inline" onClick={handleLogout}>
+              <LogOut size={16} />
+              <span>Logout</span>
+            </button>
+          </div>
+        </motion.header>
+
+        <motion.main
+          className="main-content"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.28 }}
+        >
+          <Outlet />
+        </motion.main>
+      </div>
+
+      {mobileMenuOpen && <button type="button" className="sidebar-backdrop" aria-label="Close sidebar" onClick={() => setMobileMenuOpen(false)} />}
     </div>
   )
 }

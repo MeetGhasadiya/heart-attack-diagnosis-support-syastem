@@ -32,6 +32,20 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem(CURRENT_USER_KEY)
+
+    // Remove any app-scoped persisted data so next session starts clean.
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('cardioai_')) {
+        localStorage.removeItem(key)
+      }
+    })
+
+    Object.keys(sessionStorage).forEach((key) => {
+      if (key.startsWith('cardioai_')) {
+        sessionStorage.removeItem(key)
+      }
+    })
+
     setUser(null)
   }
 

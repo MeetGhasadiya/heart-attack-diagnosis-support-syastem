@@ -1,126 +1,165 @@
-import React from 'react'
+import React, { useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { AlertTriangle, ChevronDown, ChevronUp, CircleCheckBig, ShieldAlert, Sparkles } from 'lucide-react'
 import './ResultCard.css'
 
 const RISK_CONFIG = {
-  High: { color: '#ff4466', bg: 'rgba(255,68,102,0.1)', border: 'rgba(255,68,102,0.3)', icon: '⚠', label: 'HIGH RISK' },
-  Medium: { color: '#f5c842', bg: 'rgba(245,200,66,0.1)', border: 'rgba(245,200,66,0.3)', icon: '◈', label: 'MEDIUM RISK' },
-  Low: { color: '#2de89e', bg: 'rgba(45,232,158,0.1)', border: 'rgba(45,232,158,0.3)', icon: '✓', label: 'LOW RISK' },
+  High: {
+    tone: 'danger',
+    color: '#EF4444',
+    surface: 'rgba(239, 68, 68, 0.08)',
+    border: 'rgba(239, 68, 68, 0.24)',
+    label: 'HIGH RISK',
+    icon: AlertTriangle,
+  },
+  Medium: {
+    tone: 'warning',
+    color: '#F59E0B',
+    surface: 'rgba(245, 158, 11, 0.08)',
+    border: 'rgba(245, 158, 11, 0.24)',
+    label: 'MEDIUM RISK',
+    icon: ShieldAlert,
+  },
+  Low: {
+    tone: 'success',
+    color: '#10B981',
+    surface: 'rgba(16, 185, 129, 0.08)',
+    border: 'rgba(16, 185, 129, 0.24)',
+    label: 'LOW RISK',
+    icon: CircleCheckBig,
+  },
+}
+
+function normalizeRiskLevel(level) {
+  return String(level || 'Medium').trim().toLowerCase()
 }
 
 export default function ResultCard({ result, onReset }) {
-  const cfg = RISK_CONFIG[result.risk_level] || RISK_CONFIG.Medium
-  const pct = Math.round(result.risk_percentage)
+  const [expanded, setExpanded] = useState(true)
+  const level = normalizeRiskLevel(result.risk_level)
+  const cfg = level === 'high' ? RISK_CONFIG.High : level === 'low' ? RISK_CONFIG.Low : RISK_CONFIG.Medium
+  const pct = Math.max(0, Math.min(100, Number(result.risk_percentage) || 0))
+  const Icon = cfg.icon
+  const advice = Array.isArray(result.advice) && result.advice.length > 0
+    ? result.advice
+    : ['Review the patient with a clinician.', 'Escalate urgently if symptoms worsen.', 'Use the result as decision support only.']
 
   return (
-    <div className="result-card" style={{ '--risk-color': cfg.color, '--risk-bg': cfg.bg, '--risk-border': cfg.border }}>
-      {/* Header */}
-      <div className="result-header">
+    <motion.section
+      className={`result-card ${cfg.tone}`}
+      style={{ '--risk-color': cfg.color, '--risk-surface': cfg.surface, '--risk-border': cfg.border }}
+      initial={{ opacity: 0, y: 18, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.45, ease: 'easeOut' }}
+    >
+      <div className="result-hero">
         <div className="result-badge">
-          <span className="result-icon">{cfg.icon}</span>
-          <span className="result-label">{cfg.label}</span>
+          <span className="result-badge-icon">
+            <Icon size={18} />
+          </span>
+          <div>
+            <div className="result-label">{cfg.label}</div>
+            <div className="result-note">AI-generated clinical support summary</div>
+          </div>
         </div>
-        <button className="reset-btn" onClick={onReset}>← New Analysis</button>
+
+        <button type="button" className="result-reset" onClick={onReset}>
+          <Sparkles size={16} />
+          New prediction
+        </button>
       </div>
 
-      {/* Main metric */}
-      <div className="result-main">
-        <div className="risk-gauge">
-          <svg viewBox="0 0 200 120" className="gauge-svg">
+      <div className="result-body">
+        <motion.div
+          className="risk-ring"
+          animate={cfg.tone === 'danger' ? { scale: [1, 1.02, 1] } : { scale: 1 }}
+          transition={{ duration: 1.8, repeat: cfg.tone === 'danger' ? Infinity : 0, repeatType: 'mirror' }}
+        >
+          <svg viewBox="0 0 220 220" className="ring-svg">
             <defs>
-              <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#2de89e" />
-                <stop offset="50%" stopColor="#f5c842" />
-                <stop offset="100%" stopColor="#ff4466" />
+              <linearGradient id="riskGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#10B981" />
+                <stop offset="50%" stopColor="#F59E0B" />
+                <stop offset="100%" stopColor="#EF4444" />
               </linearGradient>
             </defs>
-            {/* Track */}
-            <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="12" strokeLinecap="round" />
-            {/* Fill */}
-            <path
-              d="M 20 100 A 80 80 0 0 1 180 100"
-              fill="none"
-              stroke="url(#gaugeGrad)"
-              strokeWidth="12"
-              strokeLinecap="round"
-              strokeDasharray="251"
-              strokeDashoffset={251 - (pct / 100) * 251}
-              style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)' }}
+            <circle cx="110" cy="110" r="82" className="ring-track" />
+            <motion.circle
+              cx="110"
+              cy="110"
+              r="82"
+              className="ring-progress"
+              stroke="url(#riskGradient)"
+              strokeDasharray={515}
+              initial={{ strokeDashoffset: 515 }}
+              animate={{ strokeDashoffset: 515 - (pct / 100) * 515 }}
+              transition={{ duration: 1.3, ease: 'easeOut' }}
             />
-            {/* Needle */}
-            <line
-              x1="100" y1="100"
-              x2={100 + 65 * Math.cos(Math.PI * (1 - pct / 100))}
-              y2={100 - 65 * Math.sin(Math.PI * (1 - pct / 100))}
-              stroke={cfg.color}
-              strokeWidth="2.5"
-              strokeLinecap="round"
-            />
-            <circle cx="100" cy="100" r="5" fill={cfg.color} />
           </svg>
-          <div className="gauge-value" style={{ color: cfg.color }}>{pct}<span>%</span></div>
-          <div className="gauge-label">Risk Score</div>
-        </div>
 
-        <div className="result-details">
-          <div className="detail-row">
-            <span className="detail-key">Risk Level</span>
-            <span className="detail-val" style={{ color: cfg.color }}>{result.risk_level}</span>
+          <div className="ring-copy">
+            <motion.div className="ring-value" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }}>
+              {pct.toFixed(1)}%
+            </motion.div>
+            <div className="ring-caption">Estimated cardiac risk</div>
           </div>
-          <div className="detail-row">
-            <span className="detail-key">Probability</span>
-            <span className="detail-val">{result.risk_percentage.toFixed(1)}%</span>
+        </motion.div>
+
+        <div className="result-summary">
+          <div className="summary-card">
+            <span className="summary-key">Risk level</span>
+            <span className="summary-value" style={{ color: cfg.color }}>{result.risk_level || 'Medium'}</span>
           </div>
-          <div className="detail-row">
-            <span className="detail-key">Timestamp</span>
-            <span className="detail-val">{new Date(result.timestamp).toLocaleString()}</span>
+          <div className="summary-card">
+            <span className="summary-key">Prediction confidence</span>
+            <span className="summary-value">{pct >= 70 ? 'Elevated' : pct >= 40 ? 'Moderate' : 'Controlled'}</span>
           </div>
-          <div className="detail-row">
-            <span className="detail-key">Patient ID</span>
-            <span className="detail-val mono">{result.user_id?.slice(0, 8)}…</span>
+          <div className="summary-card">
+            <span className="summary-key">Timestamp</span>
+            <span className="summary-value">{result.timestamp ? new Date(result.timestamp).toLocaleString() : 'Now'}</span>
           </div>
-          {result._debug && (
-            <>
-              <div className="detail-row" style={{ borderTop: '1px solid rgba(255,255,255,0.2)', marginTop: '12px', paddingTop: '12px' }}>
-                <span className="detail-key">Model Status</span>
-                <span className="detail-val" style={{ color: result._debug.model_used ? '#2de89e' : '#f5c842' }}>
-                  {result._debug.model_used ? '✓ AI Model' : '⚠ Mock Data'}
-                </span>
-              </div>
-              <div className="detail-row">
-                <span className="detail-key">Saved to DB</span>
-                <span className="detail-val" style={{ color: result._debug.saved_to_dynamodb ? '#2de89e' : '#ff4466' }}>
-                  {result._debug.saved_to_dynamodb ? '✓ Yes' : '✗ No'}
-                </span>
-              </div>
-              {result._debug.dynamodb_error && (
-                <div className="detail-row">
-                  <span className="detail-key">DB Error</span>
-                  <span className="detail-val mono" style={{ fontSize: '11px', color: '#ff8899' }}>
-                    {result._debug.dynamodb_error?.substring(0, 40)}...
-                  </span>
-                </div>
-              )}
-            </>
-          )}
+          <div className="summary-card">
+            <span className="summary-key">Patient token</span>
+            <span className="summary-value mono">{result.user_id ? `${result.user_id.slice(0, 10)}…` : 'Unavailable'}</span>
+          </div>
         </div>
       </div>
 
-      {/* Advice */}
-      <div className="advice-section">
-        <div className="advice-title">Medical Recommendations</div>
-        <ul className="advice-list">
-          {result.advice?.map((a, i) => (
-            <li key={i} className="advice-item">
-              <span className="advice-dot" style={{ background: cfg.color }} />
-              {a}
-            </li>
-          ))}
-        </ul>
-      </div>
+      <button type="button" className="result-expand" onClick={() => setExpanded((value) => !value)}>
+        <span>Clinical guidance</span>
+        {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
 
-      <div className="result-disclaimer">
-        ⚕ This tool is for decision support only. Always consult a qualified cardiologist for diagnosis and treatment.
-      </div>
-    </div>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            className="advice-section"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.28, ease: 'easeOut' }}
+          >
+            <div className="advice-grid">
+              {advice.map((item, index) => (
+                <motion.div
+                  key={`${item}-${index}`}
+                  className="advice-item"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.04 }}
+                >
+                  <span className="advice-bullet" style={{ background: cfg.color }} />
+                  <span>{item}</span>
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="result-disclaimer">
+              This system supports clinical judgment and does not replace a specialist evaluation, ECG review, or emergency care when indicated.
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.section>
   )
 }
