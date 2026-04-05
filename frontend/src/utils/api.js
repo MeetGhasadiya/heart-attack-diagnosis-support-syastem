@@ -1,11 +1,20 @@
 import axios from 'axios'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const api = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' }
 })
+
+function getAuthToken() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('cardioai_user') || 'null')
+    return stored?.accessToken || stored?.idToken || ''
+  } catch {
+    return ''
+  }
+}
 
 export const registerUser = async (name, email, password) => {
   const { data } = await api.post('/register', { name, email, password })
@@ -32,13 +41,19 @@ export const resetPassword = async (email, code, new_password) => {
   return data
 }
 
-export const predictRisk = async (features, userId) => {
-  const { data } = await api.post('/predict', { features, user_id: userId })
+export const predictRisk = async (features) => {
+  const token = getAuthToken()
+  const { data } = await api.post('/predict', { features }, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  })
   return data
 }
 
-export const getHistory = async (userId) => {
-  const { data } = await api.get(`/history/${userId}`)
+export const getHistory = async () => {
+  const token = getAuthToken()
+  const { data } = await api.get('/history', {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  })
   return data
 }
 

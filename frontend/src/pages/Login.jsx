@@ -16,11 +16,11 @@ export default function Login() {
     setError('')
     setLoading(true)
     
-    const ok = await login(email, password)
-    if (ok) {
+    const result = await login(email, password)
+    if (result.ok) {
       navigate('/')
     } else {
-      setError('Invalid credentials. Password must be at least 6 characters.')
+      setError(result.error || 'Login failed')
     }
     setLoading(false)
   }

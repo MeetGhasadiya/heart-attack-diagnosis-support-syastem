@@ -5,9 +5,10 @@ import numpy as np
 import boto3
 import uuid
 import os
+import json
+import base64
 import hmac
 import hashlib
-import base64
 from datetime import datetime
 from dotenv import load_dotenv
 from botocore.exceptions import ClientError
@@ -23,7 +24,7 @@ COGNITO_CLIENT_ID = os.getenv('APP_CLIENT_ID')
 COGNITO_CLIENT_SECRET = os.getenv('APP_CLIENT_SECRET')
 USER_POOL_ID = os.getenv('USER_POOL_ID')
 DYNAMODB_TABLE_USERS = os.getenv('DYNAMODB_TABLE', 'user-table')
-DYNAMODB_TABLE_PREDICTIONS = 'HeartPredictions'
+DYNAMODB_TABLE_PREDICTIONS = 'heart-ai-data'
 
 # ✅ COGNITO SECRET HASH FUNCTION
 def get_secret_hash(username):
@@ -35,6 +36,20 @@ def get_secret_hash(username):
     secret = bytes(COGNITO_CLIENT_SECRET, 'utf-8')
     dig = hmac.new(secret, msg=message, digestmod=hashlib.sha256).digest()
     return base64.b64encode(dig).decode()
+
+
+def verify_token(token):
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+
+        payload_part = parts[1]
+        padding = "=" * (-len(payload_part) % 4)
+        decoded = base64.urlsafe_b64decode(payload_part + padding)
+        return json.loads(decoded.decode("utf-8"))
+    except Exception:
+        return None
 
 # ✅ INITIALIZE AWS CLIENTS
 cognito = boto3.client('cognito-idp', region_name=AWS_REGION)
@@ -313,12 +328,23 @@ def confirm_password():
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
+        auth_header = request.headers.get("Authorization")
+
+        if not auth_header:
+            return jsonify({"error": "No token"}), 401
+
+        token = auth_header.replace("Bearer ", "")
+        user = verify_token(token)
+
+        if not user:
+            return jsonify({"error": "Invalid token"}), 401
+
         body = request.get_json()
         if not body or "features" not in body:
             return jsonify({"error": "Missing 'features' in request body"}), 400
 
         features = body["features"]
-        user_id = body.get("user_id", str(uuid.uuid4()))
+        user_id = user["sub"]
 
         if len(features) != 13:
             return jsonify({"error": f"Expected 13 features, got {len(features)}"}), 400
@@ -371,10 +397,23 @@ def predict():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/history/<user_id>", methods=["GET"])
-def get_history(user_id):
-    """Fetch prediction history for a user from DynamoDB."""
+@app.route("/history", methods=["GET"])
+def get_history():
+    """Fetch prediction history for the authenticated user from DynamoDB."""
     try:
+        auth_header = request.headers.get("Authorization")
+
+        if not auth_header:
+            return jsonify({"error": "No token"}), 401
+
+        token = auth_header.replace("Bearer ", "")
+        user = verify_token(token)
+
+        if not user:
+            return jsonify({"error": "Invalid token"}), 401
+
+        user_id = user["sub"]
+
         table = get_predictions_table()
         if not table:
             return jsonify({"history": [], "message": "DynamoDB predictions table not configured"}), 200
@@ -392,4 +431,4 @@ if __name__ == "__main__":
     print(f"🚀 Starting CardioAI backend on port {port}")
     print(f"📍 Cognito User Pool: {USER_POOL_ID}")
     print(f"📍 AWS Region: {AWS_REGION}")
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port)

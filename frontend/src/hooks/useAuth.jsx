@@ -22,10 +22,11 @@ export function AuthProvider({ children }) {
       }
       localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userData))
       setUser(userData)
-      return true
+      return { ok: true }
     } catch (error) {
-      console.error('Login failed:', error.response?.data?.error || error.message)
-      return false
+      const message = error.response?.data?.error || error.message || 'Login failed'
+      console.error('Login failed:', message)
+      return { ok: false, error: message }
     }
   }
 

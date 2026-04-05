@@ -1,22 +1,20 @@
 import React, { useEffect, useState } from 'react'
 import { getHistory } from '../utils/api'
-import { useAuth } from '../hooks/useAuth'
 import './History.css'
 
 const RISK_COLORS = { High: '#ff4466', Medium: '#f5c842', Low: '#2de89e' }
 
 export default function History() {
-  const { user } = useAuth()
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    getHistory(user?.id)
+    getHistory()
       .then(d => setHistory(d.history || []))
       .catch(e => setError(e.response?.data?.error || 'Could not load history'))
       .finally(() => setLoading(false))
-  }, [user])
+  }, [])
 
   return (
     <div className="history-page">

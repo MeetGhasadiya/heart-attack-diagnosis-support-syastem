@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
 import { predictRisk } from '../utils/api'
-import { useAuth } from '../hooks/useAuth'
 import ResultCard from '../components/ResultCard'
 import './Predict.css'
 
@@ -34,7 +33,6 @@ const FIELDS = [
 const DEMO_VALUES = { age: 52, sex: 1, cp: 0, trestbps: 125, chol: 212, fbs: 0, restecg: 1, thalach: 168, exang: 0, oldpeak: 1.0, slope: 2, ca: 2, thal: 3 }
 
 export default function Predict() {
-  const { user } = useAuth()
   const [form, setForm] = useState({})
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -52,7 +50,7 @@ export default function Predict() {
     }
     setLoading(true)
     try {
-      const data = await predictRisk(features, user?.id)
+      const data = await predictRisk(features)
       setResult(data)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err) {
