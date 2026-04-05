@@ -8,6 +8,7 @@ export default function History() {
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
   const [debug, setDebug] = useState(null)
 
   useEffect(() => {
@@ -15,10 +16,13 @@ export default function History() {
       .then(d => {
         setHistory(d.history || [])
         setDebug(d._debug)
+        setMessage(d.message || '')
         console.log('📜 History Response:', d)
       })
       .catch(e => {
         setError(e.response?.data?.error || 'Could not load history')
+        setMessage(e.response?.data?.message || '')
+        setDebug(e.response?.data?._debug || null)
         console.error('❌ History Error:', e)
       })
       .finally(() => setLoading(false))
@@ -50,7 +54,7 @@ export default function History() {
         <div className="history-empty">
           <div className="empty-icon">◷</div>
           <div className="empty-title">No Records Yet</div>
-          <div className="empty-desc">Run your first prediction to see history here.</div>
+          <div className="empty-desc">{message || 'Run your first prediction to see history here.'}</div>
           {debug && (
             <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', fontSize: '12px', textAlign: 'left', fontFamily: 'monospace' }}>
               <strong>Debug:</strong> Table: {debug.table_name} | User: {debug.user_id?.slice(0, 8)}… | Records: {debug.total_count}

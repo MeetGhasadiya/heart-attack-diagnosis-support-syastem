@@ -9,14 +9,42 @@ import json
 import base64
 import hmac
 import hashlib
+import logging
 from datetime import datetime
 from dotenv import load_dotenv
 from botocore.exceptions import ClientError
+from boto3.dynamodb.conditions import Key
 
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend.log")
+logger = logging.getLogger("cardioai")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+    logger.addHandler(file_handler)
+
+
+@app.before_request
+def log_request_start():
+    logger.info("%s %s from %s", request.method, request.path, request.remote_addr)
+
+
+@app.after_request
+def log_request_end(response):
+    logger.info("%s %s -> %s", request.method, request.path, response.status_code)
+    return response
+
+SERVER_PID = os.getpid()
+SERVER_INSTANCE = f"pid-{SERVER_PID}"
 
 # ✅ AWS CONFIGURATION
 AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
@@ -59,30 +87,38 @@ def get_users_table():
     try:
         return dynamodb.Table(DYNAMODB_TABLE_USERS)
     except Exception as e:
-        print(f"❌ User table error: {e}")
+        logger.exception("❌ User table error: %s", e)
         return None
 
 def get_predictions_table():
     try:
         return dynamodb.Table(DYNAMODB_TABLE_PREDICTIONS)
     except Exception as e:
-        print(f"❌ Predictions table error: {e}")
+        logger.exception("❌ Predictions table error: %s", e)
         return None
 
 # Load ML model
 model = None
 model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "heart_model.pkl")
-print(f"📂 Looking for model at: {model_path}")
+logger.info("📂 Looking for model at: %s", model_path)
 try:
     if os.path.exists(model_path):
         model = joblib.load(model_path)
-        print("✅ Model loaded successfully from", model_path)
+        logger.info("✅ Model loaded successfully from %s", model_path)
     else:
-        print(f"⚠️  Model file not found at {model_path}")
-        print(f"⚠️  Files in directory: {os.listdir(os.path.dirname(model_path))}")
+        logger.warning("⚠️  Model file not found at %s", model_path)
+        logger.warning("⚠️  Files in directory: %s", os.listdir(os.path.dirname(model_path)))
 except Exception as e:
-    print(f"⚠️  Model loading error: {e}. Using mock predictor.")
+    logger.exception("⚠️  Model loading error: %s. Using mock predictor.", e)
     model = None
+
+MODEL_STATUS = {
+    "loaded": model is not None,
+    "source": "heart_model.pkl" if model is not None else "mock",
+    "path": model_path,
+    "class_name": type(model).__name__ if model is not None else None,
+    "expected_features": getattr(model, "n_features_in_", None) if model is not None else None,
+}
 
 
 def get_risk_advice(risk_level, risk_pct):
@@ -117,11 +153,17 @@ def get_risk_advice(risk_level, risk_pct):
 
 @app.route("/", methods=["GET"])
 def health():
+    logger.info("Health check requested")
     return jsonify({
         "status": "Heart Attack Diagnosis API is running ✅", 
         "version": "1.0.0",
-        "model_loaded": model is not None,
-        "model_path": model_path if model else "Not loaded",
+        "server_pid": SERVER_PID,
+        "server_instance": SERVER_INSTANCE,
+        "model_loaded": MODEL_STATUS["loaded"],
+        "model_source": MODEL_STATUS["source"],
+        "model_class": MODEL_STATUS["class_name"],
+        "model_expected_features": MODEL_STATUS["expected_features"],
+        "model_path": MODEL_STATUS["path"] if MODEL_STATUS["loaded"] else "Not loaded",
         "dynamodb_table": DYNAMODB_TABLE_PREDICTIONS,
         "aws_region": AWS_REGION
     })
@@ -363,18 +405,36 @@ def predict():
         if len(features) != 13:
             return jsonify({"error": f"Expected 13 features, got {len(features)}"}), 400
 
-        print(f"\n🔍 PREDICTION REQUEST:")
-        print(f"   User ID: {user_id}")
-        print(f"   Features: {features}")
+        logger.info("🔍 PREDICTION REQUEST: user_id=%s features=%s", user_id, features)
 
         arr = np.array(features, dtype=float).reshape(1, -1)
 
+        model_expected = getattr(model, "n_features_in_", None) if model is not None else None
+        if model is not None and model_expected is not None and model_expected != arr.shape[1]:
+            logger.error(
+                "❌ Model feature mismatch: model expects %s but request has %s",
+                model_expected,
+                arr.shape[1],
+            )
+            return jsonify({
+                "error": f"Model expects {model_expected} features, but request sent {arr.shape[1]}.",
+                "_debug": {
+                    "server_pid": SERVER_PID,
+                    "server_instance": SERVER_INSTANCE,
+                    "model_loaded": True,
+                    "model_class": type(model).__name__,
+                    "model_expected_features": model_expected,
+                    "request_features": arr.shape[1],
+                    "hint": "Regenerate heart_model.pkl with backend/train_model.py (13 features)."
+                }
+            }), 400
+
         if model:
-            print(f"   🤖 Using AI model for prediction...")
+            logger.info("🤖 Using AI model for prediction...")
             prediction = model.predict_proba(arr)[0][1]
             used_model = True
         else:
-            print(f"   📊 Model not available, using mock prediction...")
+            logger.warning("📊 Model not available, using mock prediction...")
             prediction = float(np.clip(np.sum(arr) / 1000, 0.05, 0.95))
             used_model = False
 
@@ -396,13 +456,19 @@ def predict():
             "advice": advice,
             "timestamp": datetime.utcnow().isoformat(),
             "_debug": {
+                "server_pid": SERVER_PID,
+                "server_instance": SERVER_INSTANCE,
                 "model_used": used_model,
+                "model_loaded": MODEL_STATUS["loaded"],
+                "model_source": MODEL_STATUS["source"],
+                "model_class": MODEL_STATUS["class_name"],
+                "model_expected_features": MODEL_STATUS["expected_features"],
                 "model_file": model_path if used_model else "None",
                 "prediction_value": round(float(prediction), 4)
             }
         }
 
-        print(f"   ✅ Prediction: {risk_level} ({risk_pct}%)")
+        logger.info("✅ Prediction: %s (%s%%)", risk_level, risk_pct)
 
         # Save to DynamoDB (if configured)
         table = get_predictions_table()
@@ -418,21 +484,21 @@ def predict():
                     "model_used": str(used_model)
                 }
                 table.put_item(Item=save_item)
-                print(f"   💾 Saved to DynamoDB: {save_item['prediction_id']}")
+                logger.info("💾 Saved to DynamoDB: %s", save_item['prediction_id'])
                 result["_debug"]["saved_to_dynamodb"] = True
             except Exception as e:
-                print(f"   ❌ DynamoDB save failed: {e}")
+                logger.exception("❌ DynamoDB save failed: %s", e)
                 result["_debug"]["saved_to_dynamodb"] = False
                 result["_debug"]["dynamodb_error"] = str(e)
         else:
-            print(f"   ⚠️  DynamoDB table not configured")
+            logger.warning("⚠️  DynamoDB table not configured")
             result["_debug"]["saved_to_dynamodb"] = False
 
-        print(f"   ✅ Response sent\n")
+        logger.info("✅ Response sent")
         return jsonify(result)
 
     except Exception as e:
-        print(f"   ❌ Prediction error: {str(e)}\n")
+        logger.exception("❌ Prediction error: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -440,60 +506,94 @@ def predict():
 def get_history():
     """Fetch prediction history for the authenticated user from DynamoDB."""
     try:
+        logger.info("📜 HISTORY REQUEST")
+        
         auth_header = request.headers.get("Authorization")
-
         if not auth_header:
+            logger.warning("❌ No auth header")
             return jsonify({"error": "No token"}), 401
 
         token = auth_header.replace("Bearer ", "")
         user = verify_token(token)
-
         if not user:
+            logger.warning("❌ Invalid token")
             return jsonify({"error": "Invalid token"}), 401
 
-        user_id = user["sub"]
-        print(f"\n📜 HISTORY REQUEST:")
-        print(f"   User ID: {user_id}")
+        user_id = user.get("sub")
+        if not user_id:
+            logger.warning("❌ No 'sub' claim in token. Token claims: %s", user)
+            return jsonify({"error": "Invalid token: missing 'sub' claim"}), 401
+            
+        logger.info("   User ID: %s", user_id)
 
         table = get_predictions_table()
         if not table:
-            print(f"   ⚠️  DynamoDB predictions table not configured")
+            logger.warning("⚠️  DynamoDB predictions table not configured")
             return jsonify({
                 "history": [], 
                 "message": "DynamoDB predictions table not configured",
                 "_debug": {
+                    "server_pid": SERVER_PID,
+                    "server_instance": SERVER_INSTANCE,
                     "table_status": "not_found",
+                    "table_name": DYNAMODB_TABLE_PREDICTIONS,
                     "user_id": user_id
                 }
             }), 200
 
-        print(f"   🔍 Querying DynamoDB...")
-        response = table.query(
-            KeyConditionExpression=boto3.dynamodb.conditions.Key('user_id').eq(user_id)
-        )
+        logger.info("🔍 Querying DynamoDB for user: %s", user_id)
+        try:
+            response = table.query(
+                KeyConditionExpression=Key('user_id').eq(user_id)
+            )
+            items = response.get("Items", [])
+            logger.info("✅ Found %s predictions", len(items))
+            
+            for item in items:
+                logger.info("      - %s: %s (%s%%)", item.get('timestamp'), item.get('risk_level'), item.get('risk_percentage'))
+        except Exception as ddb_err:
+            error_name = type(ddb_err).__name__
+            error_code = None
+            if isinstance(ddb_err, ClientError):
+                error_code = ddb_err.response.get("Error", {}).get("Code")
+            logger.exception("❌ DynamoDB query error: %s: %s", error_name, str(ddb_err))
+            if error_name == "ResourceNotFoundException" or error_code == "ResourceNotFoundException":
+                return jsonify({
+                    "history": [],
+                    "message": f"DynamoDB table '{DYNAMODB_TABLE_PREDICTIONS}' was not found",
+                    "_debug": {
+                        "server_pid": SERVER_PID,
+                        "server_instance": SERVER_INSTANCE,
+                        "error_type": error_name,
+                        "error_code": error_code,
+                        "error_details": str(ddb_err),
+                        "table_name": DYNAMODB_TABLE_PREDICTIONS,
+                        "user_id": user_id
+                    }
+                }), 200
+            raise ddb_err
         
-        items = response.get("Items", [])
-        print(f"   ✅ Found {len(items)} predictions")
-        
-        # Print each item for debugging
-        for item in items:
-            print(f"      - {item.get('timestamp')}: {item.get('risk_level')} ({item.get('risk_percentage')}%)")
-        
-        print(f"   ✅ Response sent\n")
+        logger.info("✅ Response sent")
         
         return jsonify({
             "history": items,
             "_debug": {
+                "server_pid": SERVER_PID,
+                "server_instance": SERVER_INSTANCE,
                 "total_count": len(items),
                 "user_id": user_id,
                 "table_name": DYNAMODB_TABLE_PREDICTIONS
             }
         })
+        
     except Exception as e:
-        print(f"   ❌ History error: {str(e)}\n")
+        logger.exception("❌ History error: %s: %s", type(e).__name__, str(e))
         return jsonify({
-            "error": str(e),
+            "error": f"{type(e).__name__}: {str(e)}",
             "_debug": {
+                "server_pid": SERVER_PID,
+                "server_instance": SERVER_INSTANCE,
+                "error_type": type(e).__name__,
                 "error_details": str(e)
             }
         }), 500
@@ -502,6 +602,7 @@ def get_history():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     print(f"🚀 Starting CardioAI backend on port {port}")
+    print(f"🧠 Backend server PID: {SERVER_PID}")
     print(f"📍 Cognito User Pool: {USER_POOL_ID}")
     print(f"📍 AWS Region: {AWS_REGION}")
     app.run(host="0.0.0.0", port=port)
