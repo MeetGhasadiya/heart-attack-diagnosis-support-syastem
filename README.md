@@ -95,12 +95,13 @@ npm run dev
   "user_id": "abc123",
   "risk_percentage": 72.4,
   "risk_level": "High",
-  "advice": ["Consult a cardiologist immediately.", "..."],
+  "suggestion": ["...", "...", "..."],
+  "advice": ["...", "...", "..."],
   "timestamp": "2024-01-15T10:30:00"
 }
 ```
 
-### `GET /history/<user_id>`
+### `GET /history`
 
 Returns all past predictions for a user from DynamoDB.
 
@@ -149,8 +150,18 @@ npm run build
 
 ### DynamoDB Table
 
-- Table name: `HeartPredictions`
+- Table name: `heart-ai-data`
 - Partition key: `user_id` (String)
+- Suggested attributes: `prediction_id`, `risk_level`, `risk_percentage`, `features`, `suggestion`, `timestamp`, `model_used`
+
+### Gemini Configuration
+
+Add these variables in `backend/.env`:
+
+```env
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-1.5-flash
+```
 
 ---
 

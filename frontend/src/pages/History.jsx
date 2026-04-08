@@ -126,6 +126,11 @@ export default function History() {
                   <div className="history-row-details">
                     <div>Model: {item.model_used === 'True' ? 'AI model' : 'Mock'}</div>
                     <div>Prediction ID: {item.prediction_id || '—'}</div>
+                    <div>
+                      Suggestion: {Array.isArray(item.suggestion)
+                        ? (item.suggestion[0] || '—')
+                        : (item.suggestion || '—')}
+                    </div>
                   </div>
                 )}
               </motion.button>

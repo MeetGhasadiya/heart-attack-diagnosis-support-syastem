@@ -14,8 +14,10 @@ from datetime import datetime
 from dotenv import load_dotenv
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
+import google.generativeai as genai
 
-load_dotenv()
+ENV_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+load_dotenv(dotenv_path=ENV_FILE_PATH, override=True)
 
 app = Flask(__name__)
 CORS(app)
@@ -53,6 +55,13 @@ COGNITO_CLIENT_SECRET = os.getenv('APP_CLIENT_SECRET')
 USER_POOL_ID = os.getenv('USER_POOL_ID')
 DYNAMODB_TABLE_USERS = os.getenv('DYNAMODB_TABLE', 'user-table')
 DYNAMODB_TABLE_PREDICTIONS = 'heart-ai-data'
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '').strip()
+GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
+
+FEATURE_NAMES = [
+    'age', 'sex', 'cp', 'trestbps', 'chol', 'fbs', 'restecg',
+    'thalach', 'exang', 'oldpeak', 'slope', 'ca', 'thal'
+]
 
 # ✅ COGNITO SECRET HASH FUNCTION
 def get_secret_hash(username):
@@ -97,6 +106,103 @@ def get_predictions_table():
         logger.exception("❌ Predictions table error: %s", e)
         return None
 
+
+gemini_model = None
+GEMINI_LAST_ERROR = None
+GEMINI_ACTIVE_MODEL = None
+GEMINI_SUPPORTED_MODELS = []
+
+
+def _normalize_model_name(name):
+    value = (name or "").strip()
+    if value.startswith("models/"):
+        return value.split("/", 1)[1]
+    return value
+
+
+def _list_supported_gemini_models():
+    models = []
+    for model_info in genai.list_models():
+        methods = getattr(model_info, "supported_generation_methods", []) or []
+        model_name = _normalize_model_name(getattr(model_info, "name", ""))
+        if "generateContent" in methods and model_name.startswith("gemini"):
+            models.append(model_name)
+    return models
+
+
+def _configure_gemini_client():
+    global gemini_model, GEMINI_LAST_ERROR, GEMINI_ACTIVE_MODEL, GEMINI_SUPPORTED_MODELS
+
+    gemini_model = None
+    GEMINI_ACTIVE_MODEL = None
+
+    if not GEMINI_API_KEY:
+        GEMINI_LAST_ERROR = "GEMINI_API_KEY is missing"
+        logger.warning("⚠️ GEMINI_API_KEY is not configured. Suggestions will use fallback text.")
+        return
+
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+
+        try:
+            GEMINI_SUPPORTED_MODELS = _list_supported_gemini_models()
+        except Exception as list_err:
+            GEMINI_SUPPORTED_MODELS = []
+            logger.warning("⚠️ Could not list Gemini models: %s", list_err)
+
+        configured_name = _normalize_model_name(GEMINI_MODEL)
+        preferred_candidates = [
+            configured_name,
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-pro-latest",
+        ]
+
+        selected_model = None
+        if GEMINI_SUPPORTED_MODELS:
+            if configured_name in GEMINI_SUPPORTED_MODELS:
+                selected_model = configured_name
+            else:
+                # Accept closest family match, e.g. configured gemini-1.5-flash -> gemini-1.5-flash-latest
+                for name in GEMINI_SUPPORTED_MODELS:
+                    if name.startswith(configured_name):
+                        selected_model = name
+                        break
+
+                if not selected_model:
+                    for candidate in preferred_candidates:
+                        if candidate in GEMINI_SUPPORTED_MODELS:
+                            selected_model = candidate
+                            break
+
+                if not selected_model:
+                    selected_model = GEMINI_SUPPORTED_MODELS[0]
+        else:
+            # If model listing fails, try configured model directly.
+            selected_model = configured_name
+
+        gemini_model = genai.GenerativeModel(selected_model)
+        GEMINI_ACTIVE_MODEL = selected_model
+        GEMINI_LAST_ERROR = None
+
+        if selected_model != configured_name:
+            logger.warning(
+                "⚠️ Configured Gemini model '%s' not available. Using '%s' instead.",
+                configured_name,
+                selected_model,
+            )
+        else:
+            logger.info("✅ Gemini model configured: %s", selected_model)
+    except Exception as e:
+        GEMINI_LAST_ERROR = str(e)
+        logger.exception("⚠️ Gemini configuration failed: %s", e)
+        gemini_model = None
+        GEMINI_ACTIVE_MODEL = None
+
+
+_configure_gemini_client()
+
 # Load ML model
 model = None
 model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "heart_model.pkl")
@@ -121,34 +227,71 @@ MODEL_STATUS = {
 }
 
 
-def get_risk_advice(risk_level, risk_pct):
-    """Medical rule engine — returns risk-based advice."""
-    advice = []
-    if risk_level == "High":
-        advice = [
-            "Consult a cardiologist immediately.",
-            "Avoid strenuous physical activity until evaluated.",
-            "Monitor blood pressure daily.",
-            "Reduce sodium intake significantly.",
-            "Take prescribed medications regularly."
-        ]
-    elif risk_level == "Medium":
-        advice = [
-            "Schedule a check-up with your doctor within 2 weeks.",
-            "Adopt a heart-healthy diet (low fat, high fiber).",
-            "Exercise moderately: 30 min walk daily.",
-            "Quit smoking if applicable.",
-            "Manage stress through meditation or yoga."
-        ]
-    else:
-        advice = [
-            "Maintain your current healthy lifestyle.",
-            "Continue regular exercise (150 min/week).",
-            "Annual cardiac check-up recommended.",
-            "Stay hydrated and maintain healthy weight.",
-            "Routine blood work every 6 months."
-        ]
-    return advice
+def parse_suggestion_lines(raw_text):
+    """Convert Gemini text into a clean list of suggestion lines."""
+    if not raw_text:
+        return []
+
+    text = str(raw_text).strip()
+    if text.startswith("```"):
+        text = text.replace("```json", "").replace("```", "").strip()
+
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict) and isinstance(payload.get("suggestions"), list):
+            return [str(x).strip() for x in payload["suggestions"] if str(x).strip()]
+        if isinstance(payload, list):
+            return [str(x).strip() for x in payload if str(x).strip()]
+    except Exception:
+        pass
+
+    lines = []
+    for line in text.splitlines():
+        cleaned = line.strip().lstrip("-•0123456789. ").strip()
+        if cleaned:
+            lines.append(cleaned)
+    return lines
+
+
+def fallback_suggestions(risk_level, risk_pct):
+    return [
+        f"Predicted risk is {risk_level} at {risk_pct}%. Please review this result with a qualified clinician.",
+        "Use this output as decision support only, not as a final diagnosis.",
+        "Seek urgent care immediately if chest pain, severe breathlessness, or fainting symptoms are present."
+    ]
+
+
+def get_ai_suggestions(features, risk_level, risk_pct):
+    global GEMINI_LAST_ERROR
+    if gemini_model is None:
+        return fallback_suggestions(risk_level, risk_pct), "fallback"
+
+    feature_payload = {name: value for name, value in zip(FEATURE_NAMES, features)}
+    prompt = (
+        "You are a cardiology clinical decision support assistant. "
+        "Given the model output and features, produce 3 concise actionable suggestions for clinicians and patients. "
+        "Do not claim final diagnosis. Keep each suggestion under 25 words. "
+        "Return ONLY valid JSON with this schema: {\"suggestions\": [\"...\", \"...\", \"...\"]}.\n\n"
+        f"Risk level: {risk_level}\n"
+        f"Risk percentage: {risk_pct}\n"
+        f"Features: {json.dumps(feature_payload)}"
+    )
+
+    try:
+        response = gemini_model.generate_content(prompt)
+        text = getattr(response, "text", "")
+        suggestions = parse_suggestion_lines(text)
+        if len(suggestions) >= 3:
+            GEMINI_LAST_ERROR = None
+            return suggestions[:5], "gemini"
+
+        logger.warning("⚠️ Gemini returned insufficient suggestions, using fallback")
+        GEMINI_LAST_ERROR = "Gemini response did not include at least 3 suggestions"
+        return fallback_suggestions(risk_level, risk_pct), "fallback"
+    except Exception as e:
+        GEMINI_LAST_ERROR = str(e)
+        logger.exception("❌ Gemini generation failed: %s", e)
+        return fallback_suggestions(risk_level, risk_pct), "fallback"
 
 
 @app.route("/", methods=["GET"])
@@ -165,8 +308,90 @@ def health():
         "model_expected_features": MODEL_STATUS["expected_features"],
         "model_path": MODEL_STATUS["path"] if MODEL_STATUS["loaded"] else "Not loaded",
         "dynamodb_table": DYNAMODB_TABLE_PREDICTIONS,
-        "aws_region": AWS_REGION
+        "aws_region": AWS_REGION,
+        "gemini_enabled": gemini_model is not None,
+        "gemini_model": GEMINI_MODEL,
+        "gemini_active_model": GEMINI_ACTIVE_MODEL,
+        "gemini_supported_models_count": len(GEMINI_SUPPORTED_MODELS),
+        "gemini_last_error": GEMINI_LAST_ERROR
     })
+
+
+@app.route("/gemini-status", methods=["GET"])
+def gemini_status():
+    """Run a lightweight Gemini check to validate key/model at runtime."""
+    global GEMINI_LAST_ERROR
+
+    if not GEMINI_API_KEY:
+        return jsonify({
+            "ok": False,
+            "configured": False,
+            "model": GEMINI_MODEL,
+            "error": "GEMINI_API_KEY is missing in backend/.env"
+        }), 200
+
+    if gemini_model is None:
+        return jsonify({
+            "ok": False,
+            "configured": False,
+            "model": GEMINI_MODEL,
+            "active_model": GEMINI_ACTIVE_MODEL,
+            "available_models": GEMINI_SUPPORTED_MODELS,
+            "error": GEMINI_LAST_ERROR or "Gemini client initialization failed"
+        }), 200
+
+    try:
+        response = gemini_model.generate_content("Reply with exactly: OK")
+        text = (getattr(response, "text", "") or "").strip()
+        GEMINI_LAST_ERROR = None
+        return jsonify({
+            "ok": True,
+            "configured": True,
+            "model": GEMINI_MODEL,
+            "active_model": GEMINI_ACTIVE_MODEL,
+            "available_models": GEMINI_SUPPORTED_MODELS,
+            "reply": text or "OK"
+        }), 200
+    except Exception as e:
+        GEMINI_LAST_ERROR = str(e)
+        logger.exception("❌ Gemini status check failed: %s", e)
+        return jsonify({
+            "ok": False,
+            "configured": True,
+            "model": GEMINI_MODEL,
+            "active_model": GEMINI_ACTIVE_MODEL,
+            "available_models": GEMINI_SUPPORTED_MODELS,
+            "error": str(e)
+        }), 200
+
+
+@app.route("/gemini-models", methods=["GET"])
+def gemini_models():
+    """Return models available for this API key and API version."""
+    if not GEMINI_API_KEY:
+        return jsonify({
+            "ok": False,
+            "error": "GEMINI_API_KEY is missing in backend/.env",
+            "models": []
+        }), 200
+
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        models = _list_supported_gemini_models()
+        return jsonify({
+            "ok": True,
+            "configured_model": GEMINI_MODEL,
+            "active_model": GEMINI_ACTIVE_MODEL,
+            "models": models
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "configured_model": GEMINI_MODEL,
+            "active_model": GEMINI_ACTIVE_MODEL,
+            "error": str(e),
+            "models": []
+        }), 200
 
 
 # ============================================
@@ -447,13 +672,14 @@ def predict():
         else:
             risk_level = "Low"
 
-        advice = get_risk_advice(risk_level, risk_pct)
+        suggestions, suggestion_source = get_ai_suggestions(features, risk_level, risk_pct)
 
         result = {
             "user_id": user_id,
             "risk_percentage": risk_pct,
             "risk_level": risk_level,
-            "advice": advice,
+            "suggestion": suggestions,
+            "advice": suggestions,
             "timestamp": datetime.utcnow().isoformat(),
             "_debug": {
                 "server_pid": SERVER_PID,
@@ -464,7 +690,8 @@ def predict():
                 "model_class": MODEL_STATUS["class_name"],
                 "model_expected_features": MODEL_STATUS["expected_features"],
                 "model_file": model_path if used_model else "None",
-                "prediction_value": round(float(prediction), 4)
+                "prediction_value": round(float(prediction), 4),
+                "suggestion_source": suggestion_source
             }
         }
 
@@ -480,6 +707,7 @@ def predict():
                     "risk_level": risk_level,
                     "risk_percentage": str(risk_pct),
                     "features": str(features),
+                    "suggestion": suggestions,
                     "timestamp": result["timestamp"],
                     "model_used": str(used_model)
                 }

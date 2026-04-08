@@ -40,8 +40,16 @@ export default function ResultCard({ result, onReset }) {
   const cfg = level === 'high' ? RISK_CONFIG.High : level === 'low' ? RISK_CONFIG.Low : RISK_CONFIG.Medium
   const pct = Math.max(0, Math.min(100, Number(result.risk_percentage) || 0))
   const Icon = cfg.icon
-  const advice = Array.isArray(result.advice) && result.advice.length > 0
-    ? result.advice
+  const suggestionList = Array.isArray(result.suggestion) && result.suggestion.length > 0
+    ? result.suggestion
+    : typeof result.suggestion === 'string'
+      ? result.suggestion.split(/\r?\n|\|/).map((item) => item.trim()).filter(Boolean)
+      : null
+
+  const advice = suggestionList && suggestionList.length > 0
+    ? suggestionList
+    : Array.isArray(result.advice) && result.advice.length > 0
+      ? result.advice
     : ['Review the patient with a clinician.', 'Escalate urgently if symptoms worsen.', 'Use the result as decision support only.']
 
   return (
