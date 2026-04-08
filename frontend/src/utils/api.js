@@ -57,4 +57,12 @@ export const getHistory = async () => {
   return data
 }
 
+export const getHistoryItem = async (predictionId) => {
+  const token = getAuthToken()
+  const { data } = await api.get(`/history/${predictionId}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  })
+  return data
+}
+
 export default api

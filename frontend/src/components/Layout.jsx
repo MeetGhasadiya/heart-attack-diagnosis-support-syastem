@@ -14,7 +14,7 @@ const navItems = [
 const pageTitles = {
   '/': 'Dashboard',
   '/predict': 'Prediction Workspace',
-  '/history': 'History',
+  '/history': 'Prediction History',
 }
 
 export default function Layout() {
@@ -23,15 +23,12 @@ export default function Layout() {
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const displayName = user?.name || user?.email?.split('@')[0] || 'User'
   const pageTitle = pageTitles[location.pathname] || 'Medical AI Workspace'
 
   const handleLogout = () => {
     logout()
     navigate('/login', { replace: true })
-  }
-
-  const handleNavClick = () => {
-    setMobileMenuOpen(false)
   }
 
   return (
@@ -55,27 +52,27 @@ export default function Layout() {
         </div>
 
         <nav className="sidebar-nav">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-              onClick={handleNavClick}
-            >
-              {({ isActive }) => {
-                const Icon = item.icon
+          {navItems.map((item) => {
+            const Icon = item.icon
 
-                return (
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                {({ isActive }) => (
                   <>
                     {isActive && <motion.span layoutId="nav-highlight" className="nav-highlight" />}
-                    <Icon size={18} className="nav-icon" />
+                    <Icon size={18} className="relative z-10" />
                     {!collapsed && <span className="nav-label">{item.label}</span>}
                   </>
-                )
-              }}
-            </NavLink>
-          ))}
+                )}
+              </NavLink>
+            )
+          })}
         </nav>
 
         <div className="sidebar-footer">
@@ -83,12 +80,11 @@ export default function Layout() {
             <div className="sidebar-user">
               <div className="sidebar-avatar">{user?.name?.[0]?.toUpperCase() || ''}</div>
               <div className="sidebar-user-copy">
-                <div className="sidebar-user-name">{user?.name || ''}</div>
+                <div className="sidebar-user-name">{displayName}</div>
                 <div className="sidebar-user-email">{user?.email || ''}</div>
               </div>
             </div>
           )}
-
           <button type="button" className="logout-chip" onClick={handleLogout} title="Logout">
             <LogOut size={16} />
             {!collapsed && <span>Logout</span>}
@@ -105,29 +101,16 @@ export default function Layout() {
           className="topbar"
           initial={{ y: -14, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.28 }}
         >
-          <button type="button" className="mobile-menu-btn" onClick={() => setMobileMenuOpen((value) => !value)}>
-            <Menu size={18} />
-          </button>
-
           <div className="topbar-copy">
             <div className="topbar-kicker">Medical decision support</div>
             <div className="topbar-title">{pageTitle}</div>
           </div>
 
           <div className="topbar-actions">
-            <div className="topbar-user">
-              <div className="topbar-avatar">{user?.name?.[0]?.toUpperCase() || ''}</div>
-              <div>
-                <div className="topbar-user-name">{user?.name || ''}</div>
-                <div className="topbar-user-email">{user?.email || ''}</div>
-              </div>
-            </div>
-
-            <button type="button" className="logout-inline" onClick={handleLogout}>
-              <LogOut size={16} />
-              <span>Logout</span>
+            <button type="button" className="mobile-menu-btn" onClick={() => setMobileMenuOpen((value) => !value)}>
+              <Menu size={18} />
             </button>
           </div>
         </motion.header>
@@ -142,7 +125,14 @@ export default function Layout() {
         </motion.main>
       </div>
 
-      {mobileMenuOpen && <button type="button" className="sidebar-backdrop" aria-label="Close sidebar" onClick={() => setMobileMenuOpen(false)} />}
+      {mobileMenuOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close sidebar"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
     </div>
   )
 }

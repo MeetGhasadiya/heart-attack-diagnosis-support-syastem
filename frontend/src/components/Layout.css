@@ -7,7 +7,7 @@
   left: 18px;
   top: 18px;
   bottom: 18px;
-  width: 282px;
+  width: min(82vw, 248px);
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.8);
@@ -19,7 +19,7 @@
   z-index: 30;
 }
 
-.is-collapsed .sidebar { width: 92px; }
+.is-collapsed .sidebar { width: 82px; }
 
 .sidebar-brand {
   display: flex;
@@ -43,11 +43,21 @@
 .brand-name, .topbar-title { font-weight: 800; }
 .brand-sub { font-size: 0.88rem; color: var(--muted); }
 
+.topbar-copy {
+  min-width: 0;
+}
+
+.topbar-title {
+  overflow-wrap: anywhere;
+}
+
 .sidebar-nav {
   display: grid;
   gap: 10px;
   padding: 18px 0;
   flex: 1;
+  grid-auto-rows: max-content;
+  align-content: start;
 }
 
 .nav-item {
@@ -55,7 +65,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-radius: 18px;
   color: var(--muted);
   font-weight: 600;
@@ -133,11 +143,11 @@
 }
 
 .layout-main {
-  margin-left: 314px;
+  margin-left: 280px;
   padding: 18px 22px 22px 0;
 }
 
-.is-collapsed .layout-main { margin-left: 124px; }
+.is-collapsed .layout-main { margin-left: 112px; }
 
 .topbar {
   position: sticky;
@@ -183,7 +193,7 @@
 .page-header { margin-bottom: 22px; }
 
 @media (max-width: 1080px) {
-  .sidebar { transform: translateX(-110%); transition: transform 0.22s ease; }
+  .sidebar { transform: translateX(-110%); transition: transform 0.22s ease; width: min(86vw, 300px); }
   .mobile-open .sidebar { transform: translateX(0); }
   .layout-main, .is-collapsed .layout-main { margin-left: 0; padding-left: 18px; }
   .mobile-menu-btn { display: inline-flex; }
@@ -198,8 +208,45 @@
 }
 
 @media (max-width: 768px) {
-  .topbar { flex-wrap: wrap; }
+  .topbar {
+    flex-wrap: wrap;
+    top: 10px;
+    margin: 0 10px 14px 0;
+    padding: 12px;
+    border-radius: 16px;
+  }
   .topbar-actions { width: 100%; justify-content: space-between; }
   .logout-inline { display: none; }
-  .main-content { padding-right: 18px; }
+  .main-content { padding-right: 10px; }
+  .layout-main { padding-top: 10px; }
+}
+
+@media (max-width: 480px) {
+  .sidebar {
+    left: 10px;
+    top: 10px;
+    bottom: 10px;
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .sidebar-brand {
+    padding-bottom: 12px;
+    gap: 10px;
+  }
+
+  .brand-mark {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+  }
+
+  .nav-item {
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  .sidebar-user-email {
+    max-width: 140px;
+  }
 }

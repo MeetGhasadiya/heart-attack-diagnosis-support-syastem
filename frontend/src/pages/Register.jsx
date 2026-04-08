@@ -19,13 +19,14 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false)
 
   const validations = useMemo(() => ({
-    name: name.trim().length >= 2 ? '' : 'Enter your full name.',
+    name: !name ? '' : name.trim().length >= 2 ? '' : 'Enter your full name.',
     email: !email ? '' : /\S+@\S+\.\S+/.test(email) ? '' : 'Enter a valid email address.',
     password: !password ? '' : password.length >= 6 ? '' : 'Password must be at least 6 characters.',
     confirmPassword: !confirmPassword ? '' : confirmPassword === password ? '' : 'Passwords do not match.',
   }), [name, email, password, confirmPassword])
 
   const passwordStrength = useMemo(() => {
+    if (!password) return null
     const score = [password.length >= 6, /[A-Z]/.test(password), /[0-9]/.test(password), /[^A-Za-z0-9]/.test(password)].filter(Boolean).length
     if (score <= 1) return { label: 'Weak', width: '25%', color: '#EF4444' }
     if (score === 2 || score === 3) return { label: 'Medium', width: '60%', color: '#F59E0B' }
@@ -76,8 +77,6 @@ export default function Register() {
           </div>
         </div>
 
-        <p className="auth-sub">Register with your name, email, and password to get started.</p>
-
         <form className="auth-form" onSubmit={handleSubmit}>
           <InputField label="Full name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your full name" error={validations.name} icon={User} autoFocus required />
           <InputField label="Email address" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" error={validations.email} icon={Mail} required />
@@ -97,10 +96,14 @@ export default function Register() {
             )}
           />
 
-          <div className="password-meter">
-            <div className="password-meter-bar" style={{ width: passwordStrength.width, background: passwordStrength.color }} />
-          </div>
-          <div className="password-meter-label">Password strength: {passwordStrength.label}</div>
+          {passwordStrength && (
+            <>
+              <div className="password-meter">
+                <div className="password-meter-bar" style={{ width: passwordStrength.width, background: passwordStrength.color }} />
+              </div>
+              <div className="password-meter-label" style={{ color: passwordStrength.color }}>Password strength: {passwordStrength.label}</div>
+            </>
+          )}
 
           <InputField
             label="Confirm password"
@@ -109,7 +112,7 @@ export default function Register() {
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="Repeat your password"
             error={validations.confirmPassword}
-            icon={Check}
+            icon={Lock}
             required
           />
 

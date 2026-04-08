@@ -38,11 +38,13 @@ const DEMO_VALUES = { age: 52, sex: 1, cp: 0, trestbps: 125, chol: 212, fbs: 0, 
 
 export default function Predict() {
   const [form, setForm] = useState({})
+  const [touched, setTouched] = useState({})
+  const [submitted, setSubmitted] = useState(false)
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const fieldErrors = useMemo(() => {
+  const allFieldErrors = useMemo(() => {
     const next = {}
     FIELDS.forEach((field) => {
       const raw = form[field.key]
@@ -63,13 +65,35 @@ export default function Predict() {
     return next
   }, [form])
 
-  const isFormValid = Object.keys(fieldErrors).length === 0
+  const fieldErrors = useMemo(() => {
+    const next = {}
+    FIELDS.forEach((field) => {
+      if (!submitted && !touched[field.key]) return
+      if (allFieldErrors[field.key]) next[field.key] = allFieldErrors[field.key]
+    })
+    return next
+  }, [allFieldErrors, touched, submitted])
 
-  const set = (key, val) => setForm(p => ({ ...p, [key]: val }))
+  const isFormValid = Object.keys(allFieldErrors).length === 0
+
+  const set = (key, val) => {
+    setForm((p) => ({ ...p, [key]: val }))
+    setTouched((p) => ({ ...p, [key]: true }))
+  }
+
+  const markTouched = (key) => setTouched((p) => ({ ...p, [key]: true }))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+
+    setSubmitted(true)
+    const allTouched = {}
+    FIELDS.forEach((field) => {
+      allTouched[field.key] = true
+    })
+    setTouched(allTouched)
+
     if (!isFormValid) {
       setError('Please fix the highlighted fields before submitting.')
       toast.error('Please complete all 13 fields')
@@ -93,7 +117,13 @@ export default function Predict() {
   }
 
   const loadDemo = () => setForm(DEMO_VALUES)
-  const reset = () => { setForm({}); setResult(null); setError('') }
+  const reset = () => {
+    setForm({})
+    setTouched({})
+    setSubmitted(false)
+    setResult(null)
+    setError('')
+  }
 
   const groupedFields = FIELDS.reduce((accumulator, field) => {
     accumulator[field.section] = accumulator[field.section] || []
@@ -103,16 +133,7 @@ export default function Predict() {
 
   return (
     <div className="predict-page">
-      <motion.section className="page-header premium-header" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-        <div>
-          <div className="page-kicker">Clinical workflow</div>
-          <h1>Cardiac risk analysis</h1>
-          <p>Enter the patient’s 13 clinical parameters to generate an AI-powered risk estimate and guidance.</p>
-        </div>
-        <button type="button" className="secondary-btn hero-secondary" onClick={loadDemo}>
-          <Sparkles size={16} /> Load demo values
-        </button>
-      </motion.section>
+      
 
       {result && <ResultCard result={result} onReset={reset} />}
 
@@ -123,8 +144,13 @@ export default function Predict() {
               <div className="form-title">Patient parameters</div>
               <div className="form-subtitle">All fields are required before prediction.</div>
             </div>
-            <div className={`form-chip ${isFormValid ? 'ok' : 'pending'}`}>
-              <Gauge size={14} /> {Object.keys(fieldErrors).length ? `${FIELDS.length - Object.keys(fieldErrors).length}/${FIELDS.length} complete` : 'Ready to predict'}
+            <div className="form-toolbar-actions">
+              <div className={`form-chip ${isFormValid ? 'ok' : 'pending'}`}>
+                <Gauge size={14} /> {Object.keys(allFieldErrors).length ? `${FIELDS.length - Object.keys(allFieldErrors).length}/${FIELDS.length} complete` : 'Ready to predict'}
+              </div>
+              <button type="button" className="secondary-btn hero-secondary" onClick={loadDemo}>
+                <Sparkles size={16} /> Load demo values
+              </button>
             </div>
           </div>
 
@@ -139,6 +165,7 @@ export default function Predict() {
                       label={field.label}
                       value={form[field.key] ?? ''}
                       onChange={(event) => set(field.key, event.target.value)}
+                      onBlur={() => markTouched(field.key)}
                       error={fieldErrors[field.key]}
                       helpText={field.hint}
                       as={field.type === 'select' ? 'select' : 'input'}

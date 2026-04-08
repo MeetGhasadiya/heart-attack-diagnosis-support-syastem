@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Toaster } from 'react-hot-toast'
@@ -6,6 +6,7 @@ import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Predict from './pages/Predict'
 import History from './pages/History'
+import ResultDetails from './pages/ResultDetails'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import ConfirmEmail from './pages/ConfirmEmail'
@@ -15,6 +16,20 @@ import { AuthProvider, useAuth } from './hooks/useAuth'
 function ProtectedRoute({ children }) {
   const { user } = useAuth()
   return user ? children : <Navigate to="/login" replace />
+}
+
+function ScrollToTop() {
+  const location = useLocation()
+
+  useEffect(() => {
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual'
+    }
+
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [location.pathname])
+
+  return null
 }
 
 function AnimatedRoutes() {
@@ -31,6 +46,7 @@ function AnimatedRoutes() {
           <Route index element={<Dashboard />} />
           <Route path="predict" element={<Predict />} />
           <Route path="history" element={<History />} />
+          <Route path="history/:predictionId" element={<ResultDetails />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
@@ -42,6 +58,7 @@ export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <ScrollToTop />
         <Toaster
           position="top-right"
           toastOptions={{

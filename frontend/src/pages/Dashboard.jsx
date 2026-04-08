@@ -1,16 +1,10 @@
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowRight, BarChart3, Clock3, Sparkles, ShieldCheck, Activity, History as HistoryIcon } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { getHistory } from '../utils/api'
 import './Dashboard.css'
-
-const stats = [
-  { label: 'Total predictions', value: '—', icon: BarChart3, color: '#2563EB' },
-  { label: 'High-risk alerts', value: '—', icon: ShieldCheck, color: '#EF4444' },
-  { label: 'Low-risk clearances', value: '—', icon: Sparkles, color: '#10B981' },
-  { label: 'Last assessment', value: 'Never', icon: Clock3, color: '#F59E0B' },
-]
 
 const features = [
   { title: 'ML Prediction', desc: 'Risk scoring from the cardiac model pipeline', icon: Activity },
@@ -22,6 +16,78 @@ const features = [
 export default function Dashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [summary, setSummary] = useState({
+    total_predictions: 0,
+    high_risk_alerts: 0,
+    low_risk_clearances: 0,
+    last_assessment: null,
+  })
+
+  useEffect(() => {
+    let active = true
+
+    getHistory()
+      .then((data) => {
+        if (!active) {
+          return
+        }
+
+        const apiSummary = data?.summary || {}
+        const history = Array.isArray(data?.history) ? data.history : []
+
+        if (apiSummary && Object.keys(apiSummary).length > 0) {
+          setSummary({
+            total_predictions: Number(apiSummary.total_predictions || 0),
+            high_risk_alerts: Number(apiSummary.high_risk_alerts || 0),
+            low_risk_clearances: Number(apiSummary.low_risk_clearances || 0),
+            last_assessment: apiSummary.last_assessment || null,
+          })
+          return
+        }
+
+        const high = history.filter((item) => String(item?.risk_level || '').toLowerCase() === 'high').length
+        const low = history.filter((item) => String(item?.risk_level || '').toLowerCase() === 'low').length
+        const last = history
+          .map((item) => item?.timestamp)
+          .filter(Boolean)
+          .sort()
+          .at(-1) || null
+
+        setSummary({
+          total_predictions: history.length,
+          high_risk_alerts: high,
+          low_risk_clearances: low,
+          last_assessment: last,
+        })
+      })
+      .catch(() => {
+        if (active) {
+          setSummary({
+            total_predictions: 0,
+            high_risk_alerts: 0,
+            low_risk_clearances: 0,
+            last_assessment: null,
+          })
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const stats = useMemo(() => {
+    const lastAssessmentLabel = summary.last_assessment
+      ? new Date(summary.last_assessment).toLocaleString()
+      : 'Never'
+
+    return [
+      { label: 'Total predictions', value: String(summary.total_predictions), icon: BarChart3, color: '#2563EB' },
+      { label: 'High-risk alerts', value: String(summary.high_risk_alerts), icon: ShieldCheck, color: '#EF4444' },
+      { label: 'Low-risk clearances', value: String(summary.low_risk_clearances), icon: Sparkles, color: '#10B981' },
+      { label: 'Last assessment', value: lastAssessmentLabel, icon: Clock3, color: '#F59E0B' },
+    ]
+  }, [summary])
 
   return (
     <div className="dashboard-page">
@@ -45,8 +111,16 @@ export default function Dashboard() {
           <div className="hero-orb hero-orb-b" />
           <div className="hero-monitor">
             <div className="monitor-top" />
-            <div className="monitor-curve" />
-            <div className="monitor-pulse" />
+            <svg viewBox="0 0 420 120" className="monitor-ecg" aria-hidden="true">
+              <path
+                className="monitor-ecg-track"
+                d="M10 78 L72 78 L92 72 L110 82 L128 44 L146 100 L166 66 L188 78 L240 78 L260 74 L278 82 L296 56 L314 90 L334 72 L356 78 L410 78"
+              />
+              <path
+                className="monitor-ecg-line"
+                d="M10 78 L72 78 L92 72 L110 82 L128 44 L146 100 L166 66 L188 78 L240 78 L260 74 L278 82 L296 56 L314 90 L334 72 L356 78 L410 78"
+              />
+            </svg>
           </div>
         </div>
       </motion.section>
@@ -80,17 +154,6 @@ export default function Dashboard() {
         })}
       </div>
 
-      <div className="arch-card">
-        <div className="arch-title">Workflow path</div>
-        <div className="arch-flow">
-          {['Login', 'Dashboard', 'Prediction', 'Risk analysis', 'History'].map((step, index, items) => (
-            <React.Fragment key={step}>
-              <div className="arch-step">{step}</div>
-              {index < items.length - 1 && <div className="arch-arrow">→</div>}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }

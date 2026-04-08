@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, ChevronDown, ChevronUp, CircleCheckBig, ShieldAlert, Sparkles } from 'lucide-react'
+import React from 'react'
+import { motion } from 'framer-motion'
+import { AlertTriangle, CircleCheckBig, ShieldAlert, Sparkles } from 'lucide-react'
 import './ResultCard.css'
 
 const RISK_CONFIG = {
@@ -35,7 +35,6 @@ function normalizeRiskLevel(level) {
 }
 
 export default function ResultCard({ result, onReset }) {
-  const [expanded, setExpanded] = useState(true)
   const level = normalizeRiskLevel(result.risk_level)
   const cfg = level === 'high' ? RISK_CONFIG.High : level === 'low' ? RISK_CONFIG.Low : RISK_CONFIG.Medium
   const pct = Math.max(0, Math.min(100, Number(result.risk_percentage) || 0))
@@ -71,10 +70,12 @@ export default function ResultCard({ result, onReset }) {
           </div>
         </div>
 
-        <button type="button" className="result-reset" onClick={onReset}>
-          <Sparkles size={16} />
-          New prediction
-        </button>
+        {onReset ? (
+          <button type="button" className="result-reset" onClick={onReset}>
+            <Sparkles size={16} />
+            New prediction
+          </button>
+        ) : null}
       </div>
 
       <div className="result-body">
@@ -83,34 +84,36 @@ export default function ResultCard({ result, onReset }) {
           animate={cfg.tone === 'danger' ? { scale: [1, 1.02, 1] } : { scale: 1 }}
           transition={{ duration: 1.8, repeat: cfg.tone === 'danger' ? Infinity : 0, repeatType: 'mirror' }}
         >
-          <svg viewBox="0 0 220 220" className="ring-svg">
-            <defs>
-              <linearGradient id="riskGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#10B981" />
-                <stop offset="50%" stopColor="#F59E0B" />
-                <stop offset="100%" stopColor="#EF4444" />
-              </linearGradient>
-            </defs>
-            <circle cx="110" cy="110" r="82" className="ring-track" />
-            <motion.circle
-              cx="110"
-              cy="110"
-              r="82"
-              className="ring-progress"
-              stroke="url(#riskGradient)"
-              strokeDasharray={515}
-              initial={{ strokeDashoffset: 515 }}
-              animate={{ strokeDashoffset: 515 - (pct / 100) * 515 }}
-              transition={{ duration: 1.3, ease: 'easeOut' }}
-            />
-          </svg>
+          <div className="ring-shell">
+            <svg viewBox="0 0 220 220" className="ring-svg">
+              <defs>
+                <linearGradient id="riskGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#10B981" />
+                  <stop offset="50%" stopColor="#F59E0B" />
+                  <stop offset="100%" stopColor="#EF4444" />
+                </linearGradient>
+              </defs>
+              <circle cx="110" cy="110" r="82" className="ring-track" />
+              <motion.circle
+                cx="110"
+                cy="110"
+                r="82"
+                className="ring-progress"
+                stroke="url(#riskGradient)"
+                strokeDasharray={515}
+                initial={{ strokeDashoffset: 515 }}
+                animate={{ strokeDashoffset: 515 - (pct / 100) * 515 }}
+                transition={{ duration: 1.3, ease: 'easeOut' }}
+              />
+            </svg>
 
-          <div className="ring-copy">
-            <motion.div className="ring-value" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }}>
-              {pct.toFixed(1)}%
-            </motion.div>
-            <div className="ring-caption">Estimated cardiac risk</div>
+            <div className="ring-copy">
+              <motion.div className="ring-value" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }}>
+                {pct.toFixed(1)}%
+              </motion.div>
+            </div>
           </div>
+          <div className="ring-caption">Estimated risk</div>
         </motion.div>
 
         <div className="result-summary">
@@ -124,50 +127,36 @@ export default function ResultCard({ result, onReset }) {
           </div>
           <div className="summary-card">
             <span className="summary-key">Timestamp</span>
-            <span className="summary-value">{result.timestamp ? new Date(result.timestamp).toLocaleString() : 'Now'}</span>
-          </div>
-          <div className="summary-card">
-            <span className="summary-key">Patient token</span>
-            <span className="summary-value mono">{result.user_id ? `${result.user_id.slice(0, 10)}…` : 'Unavailable'}</span>
+            <span className="summary-value summary-value-time">{result.timestamp ? new Date(result.timestamp).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Now'}</span>
           </div>
         </div>
       </div>
 
-      <button type="button" className="result-expand" onClick={() => setExpanded((value) => !value)}>
-        <span>Clinical guidance</span>
-        {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-      </button>
+      <motion.div
+        className="advice-section"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.28, ease: 'easeOut' }}
+      >
+        <div className="advice-grid">
+          {advice.map((item, index) => (
+            <motion.div
+              key={`${item}-${index}`}
+              className="advice-item"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.04 }}
+            >
+              <span className="advice-bullet" style={{ background: cfg.color }} />
+              <span>{item}</span>
+            </motion.div>
+          ))}
+        </div>
 
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            className="advice-section"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.28, ease: 'easeOut' }}
-          >
-            <div className="advice-grid">
-              {advice.map((item, index) => (
-                <motion.div
-                  key={`${item}-${index}`}
-                  className="advice-item"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.04 }}
-                >
-                  <span className="advice-bullet" style={{ background: cfg.color }} />
-                  <span>{item}</span>
-                </motion.div>
-              ))}
-            </div>
-
-            <div className="result-disclaimer">
-              This system supports clinical judgment and does not replace a specialist evaluation, ECG review, or emergency care when indicated.
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        <div className="result-disclaimer">
+          This system supports clinical judgment and does not replace a specialist evaluation, ECG review, or emergency care when indicated.
+        </div>
+      </motion.div>
     </motion.section>
   )
 }

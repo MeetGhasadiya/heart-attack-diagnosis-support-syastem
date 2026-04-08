@@ -13,10 +13,11 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     try {
       const response = await loginUser(email, password)
+      const resolvedName = response.name || email.split('@')[0]
       const userData = { 
-        id: response.id_token || email, 
-        email, 
-        name: email.split('@')[0],
+        id: response.user_id || response.id_token || email,
+        email: response.email || email,
+        name: resolvedName,
         accessToken: response.access_token,
         idToken: response.id_token
       }

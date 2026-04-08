@@ -13,7 +13,7 @@ import logging
 from datetime import datetime
 from dotenv import load_dotenv
 from botocore.exceptions import ClientError
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 import google.generativeai as genai
 
 ENV_FILE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -105,6 +105,33 @@ def get_predictions_table():
     except Exception as e:
         logger.exception("❌ Predictions table error: %s", e)
         return None
+
+
+def get_user_profile_by_sub_or_email(user_sub=None, email=None):
+    """Fetch stored user profile from DynamoDB using user_id or email."""
+    users_table = get_users_table()
+    if not users_table:
+        return None
+
+    if user_sub:
+        try:
+            response = users_table.get_item(Key={"user_id": user_sub})
+            item = response.get("Item")
+            if item:
+                return item
+        except Exception as e:
+            logger.exception("❌ Failed get_item for user_id=%s: %s", user_sub, e)
+
+    if email:
+        try:
+            response = users_table.scan(FilterExpression=Attr("email").eq(email))
+            items = response.get("Items", [])
+            if items:
+                return items[0]
+        except Exception as e:
+            logger.exception("❌ Failed scan for email=%s: %s", email, e)
+
+    return None
 
 
 gemini_model = None
@@ -513,13 +540,25 @@ def login():
         )
 
         auth_result = response["AuthenticationResult"]
+        id_token = auth_result.get("IdToken")
+        claims = verify_token(id_token) if id_token else {}
+        user_sub = claims.get("sub") if isinstance(claims, dict) else None
+        cognito_name = claims.get("name") if isinstance(claims, dict) else None
+
+        profile = get_user_profile_by_sub_or_email(user_sub=user_sub, email=email)
+        stored_name = profile.get("name") if profile else None
+        final_name = stored_name or cognito_name or email.split("@")[0]
+
         print(f"✅ Login successful: {email}")
 
         return jsonify({
             "message": "Login successful",
             "access_token": auth_result["AccessToken"],
             "id_token": auth_result["IdToken"],
-            "refresh_token": auth_result["RefreshToken"]
+            "refresh_token": auth_result["RefreshToken"],
+            "user_id": user_sub,
+            "name": final_name,
+            "email": email
         }), 200
 
     except ClientError as e:
@@ -544,6 +583,15 @@ def forgot_password():
             return jsonify({"error": "Email is required"}), 400
 
         print(f"📧 Forgot password request: {email}")
+
+        # Check if email exists in database before sending OTP
+        user_profile = get_user_profile_by_sub_or_email(email=email)
+        if not user_profile:
+            print(f"❌ Email not found in database: {email}")
+            return jsonify({"error": "Email address not found in our system"}), 400
+
+        print(f"✅ Email found in database: {email}")
+
         cognito.forgot_password(
             ClientId=COGNITO_CLIENT_ID,
             Username=email,
@@ -680,7 +728,7 @@ def predict():
             "risk_level": risk_level,
             "suggestion": suggestions,
             "advice": suggestions,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now().astimezone().isoformat(),
             "_debug": {
                 "server_pid": SERVER_PID,
                 "server_instance": SERVER_INSTANCE,
@@ -801,14 +849,32 @@ def get_history():
                 }), 200
             raise ddb_err
         
+        total_predictions = len(items)
+        high_risk_alerts = sum(1 for item in items if str(item.get("risk_level", "")).lower() == "high")
+        low_risk_clearances = sum(1 for item in items if str(item.get("risk_level", "")).lower() == "low")
+
+        latest_ts = None
+        for item in items:
+            ts = item.get("timestamp")
+            if ts and (latest_ts is None or ts > latest_ts):
+                latest_ts = ts
+
+        summary = {
+            "total_predictions": total_predictions,
+            "high_risk_alerts": high_risk_alerts,
+            "low_risk_clearances": low_risk_clearances,
+            "last_assessment": latest_ts,
+        }
+
         logger.info("✅ Response sent")
-        
+
         return jsonify({
             "history": items,
+            "summary": summary,
             "_debug": {
                 "server_pid": SERVER_PID,
                 "server_instance": SERVER_INSTANCE,
-                "total_count": len(items),
+                "total_count": total_predictions,
                 "user_id": user_id,
                 "table_name": DYNAMODB_TABLE_PREDICTIONS
             }
@@ -821,6 +887,83 @@ def get_history():
             "_debug": {
                 "server_pid": SERVER_PID,
                 "server_instance": SERVER_INSTANCE,
+                "error_type": type(e).__name__,
+                "error_details": str(e)
+            }
+        }), 500
+
+
+@app.route("/history/<prediction_id>", methods=["GET"])
+def get_prediction_history_item(prediction_id):
+    """Fetch a single prediction record for the authenticated user."""
+    try:
+        auth_header = request.headers.get("Authorization")
+        if not auth_header:
+            return jsonify({"error": "No token"}), 401
+
+        token = auth_header.replace("Bearer ", "")
+        user = verify_token(token)
+        if not user:
+            return jsonify({"error": "Invalid token"}), 401
+
+        user_id = user.get("sub")
+        if not user_id:
+            return jsonify({"error": "Invalid token: missing 'sub' claim"}), 401
+
+        table = get_predictions_table()
+        if not table:
+            return jsonify({
+                "error": "DynamoDB predictions table not configured",
+                "item": None,
+                "_debug": {
+                    "server_pid": SERVER_PID,
+                    "server_instance": SERVER_INSTANCE,
+                    "table_status": "not_found",
+                    "table_name": DYNAMODB_TABLE_PREDICTIONS,
+                    "user_id": user_id,
+                    "prediction_id": prediction_id,
+                }
+            }), 200
+
+        response = table.query(
+            KeyConditionExpression=Key('user_id').eq(user_id),
+            FilterExpression=Attr('prediction_id').eq(prediction_id)
+        )
+        items = response.get("Items", [])
+        item = items[0] if items else None
+
+        if not item:
+            return jsonify({
+                "item": None,
+                "message": "Prediction record not found",
+                "_debug": {
+                    "server_pid": SERVER_PID,
+                    "server_instance": SERVER_INSTANCE,
+                    "user_id": user_id,
+                    "prediction_id": prediction_id,
+                    "table_name": DYNAMODB_TABLE_PREDICTIONS,
+                }
+            }), 404
+
+        return jsonify({
+            "item": item,
+            "_debug": {
+                "server_pid": SERVER_PID,
+                "server_instance": SERVER_INSTANCE,
+                "user_id": user_id,
+                "prediction_id": prediction_id,
+                "table_name": DYNAMODB_TABLE_PREDICTIONS,
+            }
+        }), 200
+
+    except Exception as e:
+        logger.exception("❌ Single history item error: %s: %s", type(e).__name__, str(e))
+        return jsonify({
+            "error": f"{type(e).__name__}: {str(e)}",
+            "_debug": {
+                "server_pid": SERVER_PID,
+                "server_instance": SERVER_INSTANCE,
+                "prediction_id": prediction_id,
                 "error_type": type(e).__name__,
                 "error_details": str(e)
             }
