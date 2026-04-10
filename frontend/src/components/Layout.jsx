@@ -63,9 +63,8 @@ export default function Layout() {
                 className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
                 onClick={() => setMobileMenuOpen(false)}
               >
-                {({ isActive }) => (
+                {() => (
                   <>
-                    {isActive && <motion.span layoutId="nav-highlight" className="nav-highlight" />}
                     <Icon size={18} className="relative z-10" />
                     {!collapsed && <span className="nav-label">{item.label}</span>}
                   </>

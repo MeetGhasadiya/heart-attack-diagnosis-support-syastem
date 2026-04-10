@@ -80,7 +80,13 @@ export default function App() {
           }}
         />
         <motion.div className="app-shell" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }}>
-          <AnimatedRoutes />
+          <div className="app-frame">
+            <header className="app-frame-header">CardioAI - Heart Disease Prediction</header>
+            <main className="app-frame-main">
+              <AnimatedRoutes />
+            </main>
+            <footer className="app-frame-footer">Copyright 2026 CardioAI</footer>
+          </div>
         </motion.div>
       </BrowserRouter>
     </AuthProvider>

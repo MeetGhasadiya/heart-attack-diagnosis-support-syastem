@@ -70,11 +70,11 @@
 }
 
 .ring-shell {
-  position: relative;
+  display: grid;
   width: 100%;
 }
 
-.ring-svg { width: 100%; height: auto; }
+.ring-svg { width: 100%; height: auto; grid-area: 1 / 1; }
 .ring-track, .ring-progress {
   fill: none;
   stroke-width: 16;
@@ -88,8 +88,7 @@
 }
 
 .ring-copy {
-  position: absolute;
-  inset: 0;
+  grid-area: 1 / 1;
   display: grid;
   place-items: center;
 }
