@@ -1,13 +1,24 @@
 .layout-shell {
   min-height: 100vh;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 18px;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(220px, 248px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.layout-shell.is-collapsed {
+  grid-template-columns: 82px minmax(0, 1fr);
 }
 
 .sidebar {
-  position: fixed;
-  left: 18px;
+  position: sticky;
   top: 18px;
-  bottom: 18px;
-  width: min(82vw, 248px);
+  height: calc(100vh - 36px);
+  width: 100%;
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.8);
@@ -17,9 +28,10 @@
   flex-direction: column;
   padding: 18px;
   z-index: 30;
+  overflow-y: auto;
 }
 
-.is-collapsed .sidebar { width: 82px; }
+.is-collapsed .sidebar { width: 100%; }
 
 .sidebar-brand {
   display: flex;
@@ -143,17 +155,17 @@
 }
 
 .layout-main {
-  margin-left: 280px;
-  padding: 18px 22px 22px 0;
+  min-width: 0;
+  padding: 0;
 }
 
-.is-collapsed .layout-main { margin-left: 112px; }
+.is-collapsed .layout-main { margin-left: 0; }
 
 .topbar {
   position: sticky;
-  top: 18px;
+  top: 0;
   z-index: 20;
-  margin: 0 18px 20px 0;
+  margin: 0 0 18px;
   padding: 16px 18px;
   border-radius: 24px;
   display: flex;
@@ -183,7 +195,8 @@
 .mobile-menu-btn { display: none; }
 
 .main-content {
-  padding-right: 18px;
+  min-width: 0;
+  width: 100%;
 }
 
 .sidebar-backdrop {
@@ -193,10 +206,34 @@
 .page-header { margin-bottom: 22px; }
 
 @media (max-width: 1080px) {
-  .sidebar { transform: translateX(-110%); transition: transform 0.22s ease; width: min(86vw, 300px); }
+  .layout-shell,
+  .layout-shell.is-collapsed {
+    max-width: none;
+    display: block;
+    padding: 10px;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: 10px;
+    top: 10px;
+    bottom: 10px;
+    height: auto;
+    width: min(86vw, 300px);
+    transform: translateX(-110%);
+    transition: transform 0.22s ease;
+  }
+
   .mobile-open .sidebar { transform: translateX(0); }
-  .layout-main, .is-collapsed .layout-main { margin-left: 0; padding-left: 18px; }
+  .layout-main,
+  .is-collapsed .layout-main {
+    margin-left: 0;
+    padding-left: 0;
+  }
+
   .mobile-menu-btn { display: inline-flex; }
+  .collapse-btn { display: none; }
+
   .sidebar-backdrop {
     display: block;
     position: fixed;
@@ -204,20 +241,22 @@
     background: rgba(15, 23, 42, 0.26);
     z-index: 25;
   }
-  .topbar { margin-right: 18px; }
+  .topbar {
+    margin-right: 0;
+  }
 }
 
 @media (max-width: 768px) {
   .topbar {
     flex-wrap: wrap;
-    top: 10px;
-    margin: 0 10px 14px 0;
+    top: 0;
+    margin: 0 0 14px;
     padding: 12px;
     border-radius: 16px;
   }
   .topbar-actions { width: 100%; justify-content: space-between; }
   .logout-inline { display: none; }
-  .main-content { padding-right: 10px; }
+  .main-content { padding-right: 0; }
   .layout-main { padding-top: 10px; }
 }
 
